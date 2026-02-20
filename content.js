@@ -778,7 +778,20 @@ async function handleWatchPage() {
   if (!enabled) return;
   isRunning = true;
 
-  await sleep(2000);
+  await sleep(1000);
+
+  // Quick live stream check — before anything else
+  const quickLiveBadge = document.querySelector('.ytp-live-badge');
+  const quickBadgeVisible = quickLiveBadge && quickLiveBadge.offsetParent !== null && getComputedStyle(quickLiveBadge).display !== 'none';
+  const quickVideoEl = document.querySelector('video.html5-main-video') || document.querySelector('video');
+  const quickDurInfinite = quickVideoEl && quickVideoEl.duration === Infinity;
+  if (quickBadgeVisible || quickDurInfinite) {
+    const quickTitle = document.querySelector('ytd-watch-metadata h1 yt-formatted-string')?.textContent?.trim() || '';
+    console.log(LOG, `Live stream detected instantly (badge=${quickBadgeVisible}, dur=${quickVideoEl?.duration}): 「${quickTitle}」`);
+    window.history.back();
+    isRunning = false;
+    return;
+  }
 
   // Wait for any pre-roll ad to finish (or skip it)
   await waitForAdToFinish();
@@ -812,12 +825,25 @@ async function handleWatchPage() {
 
   console.log(LOG, `Watch: 「${title}」 ch:「${channelName}」 (${videoId})`);
 
-  // Wait for player to load metadata (returns null if duration is not finite/positive within timeout)
-  await waitForAdToFinish(); // Check again in case a mid-roll ad appeared
+  // Early live stream detection — check BEFORE waiting for player
+  const earlyLiveBadge = document.querySelector('.ytp-live-badge');
+  const earlyBadgeVisible = earlyLiveBadge && earlyLiveBadge.offsetParent !== null && getComputedStyle(earlyLiveBadge).display !== 'none';
+  const earlyVideoEl = document.querySelector('video.html5-main-video') || document.querySelector('video');
+  const earlyDurationInfinite = earlyVideoEl && earlyVideoEl.duration === Infinity;
+
+  if (earlyBadgeVisible || earlyDurationInfinite) {
+    console.log(LOG, `Live stream detected early (badge=${earlyBadgeVisible}, dur=${earlyVideoEl?.duration}), going back: 「${title}」`);
+    window.history.back();
+    isRunning = false;
+    return;
+  }
+
+  // Wait for player to load metadata
+  await waitForAdToFinish();
   const player = await waitForPlayer(10000);
 
   if (!player) {
-    // Player didn't load with a finite duration — check if it's actually a live stream
+    // Player didn't load — recheck live stream
     const videoEl = document.querySelector('video.html5-main-video') || document.querySelector('video');
     const liveBadge = document.querySelector('.ytp-live-badge');
     const badgeVisible = liveBadge && liveBadge.offsetParent !== null && getComputedStyle(liveBadge).display !== 'none';
@@ -831,7 +857,6 @@ async function handleWatchPage() {
       isRunning = false;
       return;
     }
-    // Not a live stream, just slow loading — continue anyway
     console.log(LOG, 'Not live, player slow — continuing...');
   } else {
     // Player loaded — check for extremely long videos that might be live
