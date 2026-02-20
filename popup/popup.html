@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="popup.css">
+  <title>CLEAR-gen</title>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>CLEAR-gen</h1>
+      <span class="status-dot" id="statusDot"></span>
+    </div>
+
+    <div class="toggle-row">
+      <span class="toggle-label">Auto Dislike</span>
+      <label class="switch">
+        <input type="checkbox" id="toggleSwitch">
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="stats">
+      <div class="stat-item">
+        <span class="stat-value" id="totalDislikes">0</span>
+        <span class="stat-label">Total Dislikes</span>
+      </div>
+    </div>
+
+    <button class="reset-btn" id="resetBtn">Reset Stats</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

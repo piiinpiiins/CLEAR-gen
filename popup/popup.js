@@ -1,0 +1,32 @@
+const toggleSwitch = document.getElementById('toggleSwitch');
+const statusDot = document.getElementById('statusDot');
+const totalDislikes = document.getElementById('totalDislikes');
+const resetBtn = document.getElementById('resetBtn');
+
+function updateUI(enabled, stats) {
+  toggleSwitch.checked = enabled;
+  statusDot.classList.toggle('active', enabled);
+  totalDislikes.textContent = stats?.totalDislikes ?? 0;
+}
+
+// Load state on popup open
+chrome.runtime.sendMessage({ type: 'GET_STATE' }, (response) => {
+  if (response) {
+    updateUI(response.enabled, response.stats);
+  }
+});
+
+// Toggle handler
+toggleSwitch.addEventListener('change', () => {
+  const newEnabled = toggleSwitch.checked;
+  chrome.runtime.sendMessage({ type: 'SET_ENABLED', enabled: newEnabled }, () => {
+    statusDot.classList.toggle('active', newEnabled);
+  });
+});
+
+// Reset stats
+resetBtn.addEventListener('click', () => {
+  chrome.runtime.sendMessage({ type: 'RESET_STATS' }, () => {
+    totalDislikes.textContent = '0';
+  });
+});
