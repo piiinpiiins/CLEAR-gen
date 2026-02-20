@@ -592,6 +592,14 @@ async function waitForPlayer(timeout = 10000) {
   while (Date.now() - start < timeout) {
     // Don't return during ad playback — the duration would be the ad's, not the video's
     if (await isAdPlaying()) { await sleep(500); continue; }
+
+    // Check for live badge becoming visible — abort early so caller can handle it
+    const liveBadge = document.querySelector('.ytp-live-badge');
+    if (liveBadge && liveBadge.offsetParent !== null && getComputedStyle(liveBadge).display !== 'none') {
+      console.log(LOG, 'waitForPlayer: live badge visible, aborting wait');
+      return null;  // Return null so caller falls into live stream handling
+    }
+
     const player = document.querySelector('video.html5-main-video') || document.querySelector('video');
     if (player && player.duration && isFinite(player.duration) && player.duration > 0) return player;
     await sleep(300);
@@ -785,9 +793,12 @@ async function handleWatchPage() {
   const quickBadgeVisible = quickLiveBadge && quickLiveBadge.offsetParent !== null && getComputedStyle(quickLiveBadge).display !== 'none';
   const quickVideoEl = document.querySelector('video.html5-main-video') || document.querySelector('video');
   const quickDurInfinite = quickVideoEl && quickVideoEl.duration === Infinity;
-  if (quickBadgeVisible || quickDurInfinite) {
-    const quickTitle = document.querySelector('ytd-watch-metadata h1 yt-formatted-string')?.textContent?.trim() || '';
-    console.log(LOG, `Live stream detected instantly (badge=${quickBadgeVisible}, dur=${quickVideoEl?.duration}): 「${quickTitle}」`);
+  // DVR live streams: finite duration > 12h + title has LIVE/直播
+  const quickTitle = document.querySelector('ytd-watch-metadata h1 yt-formatted-string')?.textContent?.trim() || '';
+  const quickDurDVR = quickVideoEl && quickVideoEl.duration > 43200
+    && /LIVE|直播|ライブ|24.*小時|24.*hours?/i.test(quickTitle);
+  if (quickBadgeVisible || quickDurInfinite || quickDurDVR) {
+    console.log(LOG, `Live stream detected instantly (badge=${quickBadgeVisible}, dur=${quickVideoEl?.duration}, dvr=${quickDurDVR}): 「${quickTitle}」`);
     window.history.back();
     isRunning = false;
     return;
