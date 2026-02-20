@@ -590,6 +590,8 @@ function randomDelay(min, max) { return sleep(min + Math.random() * (max - min))
 async function waitForPlayer(timeout = 10000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
+    // Don't return during ad playback — the duration would be the ad's, not the video's
+    if (await isAdPlaying()) { await sleep(500); continue; }
     const player = document.querySelector('video.html5-main-video') || document.querySelector('video');
     if (player && player.duration && isFinite(player.duration) && player.duration > 0) return player;
     await sleep(300);
@@ -736,11 +738,50 @@ async function seekToEnd(secondsBeforeEnd = 2) {
   console.log(LOG, `Seeked to ${Math.round(player.currentTime)}s / ${Math.round(player.duration)}s`);
 }
 
+async function isAdPlaying() {
+  const playerContainer = document.querySelector('#movie_player, .html5-video-player');
+  return playerContainer && (
+    playerContainer.classList.contains('ad-showing')
+    || playerContainer.classList.contains('ad-interrupting')
+    || !!document.querySelector('.ytp-ad-player-overlay, .ytp-ad-player-overlay-layout')
+  );
+}
+
+async function waitForAdToFinish(maxWait = 120000) {
+  if (!await isAdPlaying()) return;
+  console.log(LOG, 'Ad detected, waiting for it to finish...');
+
+  const start = Date.now();
+  while (Date.now() - start < maxWait) {
+    // Try to click "Skip Ad" button
+    const skipBtn = document.querySelector(
+      '.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, '
+      + 'button.ytp-ad-skip-button-modern, .ytp-ad-skip-button-container button'
+    );
+    if (skipBtn && skipBtn.offsetParent !== null) {
+      console.log(LOG, 'Clicking Skip Ad button...');
+      skipBtn.click();
+      await sleep(1000);
+    }
+
+    if (!await isAdPlaying()) {
+      console.log(LOG, `Ad finished (waited ${Math.round((Date.now() - start) / 1000)}s)`);
+      await sleep(1000); // Give the actual video a moment to load
+      return;
+    }
+    await sleep(1000);
+  }
+  console.warn(LOG, 'Ad wait timeout, continuing anyway...');
+}
+
 async function handleWatchPage() {
   if (!enabled) return;
   isRunning = true;
 
   await sleep(2000);
+
+  // Wait for any pre-roll ad to finish (or skip it)
+  await waitForAdToFinish();
 
   const videoId = new URLSearchParams(window.location.search).get('v');
   if (!videoId || processedVideoIds.has(videoId)) {
@@ -772,6 +813,7 @@ async function handleWatchPage() {
   console.log(LOG, `Watch: 「${title}」 ch:「${channelName}」 (${videoId})`);
 
   // Wait for player to load metadata (returns null if duration is not finite/positive within timeout)
+  await waitForAdToFinish(); // Check again in case a mid-roll ad appeared
   const player = await waitForPlayer(10000);
 
   if (!player) {
