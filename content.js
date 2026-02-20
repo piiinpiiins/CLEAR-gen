@@ -1040,10 +1040,16 @@ const AD_SKIP_SELECTORS = [
 
 function findAdSkipButton() {
   for (const sel of AD_SKIP_SELECTORS) {
-    const btn = document.querySelector(sel);
-    if (btn && btn.offsetParent !== null) {
-      return { btn, selector: sel };
+    const el = document.querySelector(sel);
+    if (!el || el.offsetParent === null) continue;
+    // If matched element is a container (div/span), find the actual <button> inside
+    if (el.tagName !== 'BUTTON') {
+      const innerBtn = el.querySelector('button');
+      if (innerBtn && innerBtn.offsetParent !== null) {
+        return { btn: innerBtn, selector: sel + '>button' };
+      }
     }
+    return { btn: el, selector: sel };
   }
   // Also check inside shadow DOM of yt-button-shape elements in ad area
   const adArea = document.querySelector('.ytp-ad-skip-button-slot, .ytp-ad-skip-button-container');
@@ -1055,7 +1061,6 @@ function findAdSkipButton() {
         const btn = root.querySelector('button');
         if (btn && btn.offsetParent !== null) return { btn, selector: 'shadow:yt-button-shape>button' };
       }
-      // Also try non-shadow children
       const btn = shape.querySelector('button');
       if (btn && btn.offsetParent !== null) return { btn, selector: 'yt-button-shape>button' };
     }
@@ -1066,37 +1071,55 @@ function findAdSkipButton() {
 function setupAdSkipObserver() {
   let lastSkipLog = 0;
   let lastTryTime = 0;
+  let failedClickCount = 0;  // Track consecutive failed clicks
+  let lastAdState = false;
 
   function tryClickSkip() {
-    // Throttle: at most once per 500ms to avoid freezing the main thread
     const now = Date.now();
     if (now - lastTryTime < 500) return false;
     lastTryTime = now;
+
+    // Check if ad is currently playing
+    const playerContainer = document.querySelector('#movie_player, .html5-video-player');
+    const isAd = playerContainer && (
+      playerContainer.classList.contains('ad-showing') ||
+      playerContainer.classList.contains('ad-interrupting')
+    );
+
+    // Reset failed count when ad state changes (new ad started)
+    if (isAd !== lastAdState) {
+      failedClickCount = 0;
+      lastAdState = isAd;
+    }
+
+    if (!isAd) return false;
+
+    // After 5 failed clicks on the same ad, stop spamming — it's unskippable
+    if (failedClickCount >= 5) {
+      if (now - lastSkipLog > 10000) {
+        console.log(LOG, 'Unskippable ad — waiting for it to end');
+        lastSkipLog = now;
+      }
+      return false;
+    }
 
     const result = findAdSkipButton();
     if (result) {
       const { btn, selector } = result;
       console.log(LOG, `Ad skip button found [${selector}], clicking...`);
       simulateClick(btn);
-      // Fallback clicks
       setTimeout(() => {
         btn.click();
         btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       }, 50);
+      failedClickCount++;
       return true;
     }
 
-    // Debug: log ad state periodically (every 5s)
+    // No skip button found at all
     if (now - lastSkipLog > 5000) {
-      const playerContainer = document.querySelector('#movie_player, .html5-video-player');
-      const isAd = playerContainer && (
-        playerContainer.classList.contains('ad-showing') ||
-        playerContainer.classList.contains('ad-interrupting')
-      );
-      if (isAd) {
-        console.log(LOG, 'Ad playing, no skip button (unskippable ad — waiting for it to end)');
-        lastSkipLog = now;
-      }
+      console.log(LOG, 'Ad playing, no skip button yet');
+      lastSkipLog = now;
     }
     return false;
   }
@@ -1106,8 +1129,8 @@ function setupAdSkipObserver() {
   const observer = new MutationObserver(() => tryClickSkip());
   observer.observe(playerEl, { childList: true, subtree: true });
 
-  // Poll every 500ms as fallback
-  setInterval(tryClickSkip, 500);
+  // Poll every 1s as fallback
+  setInterval(tryClickSkip, 1000);
 }
 
 function setupMessageListener() {
