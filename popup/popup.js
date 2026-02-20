@@ -30,3 +30,10 @@ resetBtn.addEventListener('click', () => {
     totalDislikes.textContent = '0';
   });
 });
+
+// Listen for real-time stats updates from background
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === 'STATS_UPDATED' && msg.stats) {
+    totalDislikes.textContent = msg.stats.totalDislikes ?? 0;
+  }
+});

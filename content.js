@@ -883,17 +883,29 @@ function detectPageType() {
   return 'other';
 }
 
+let navId = 0;  // Debounce counter for navigation events
+
 function handlePageChange() {
   if (!enabled) return;
+  const myNavId = ++navId;
   document.querySelectorAll(`.${BADGE_CLASS}-watch`).forEach(el => el.remove());
   const pageType = detectPageType();
-  console.log(LOG, `Navigation: page=${pageType}, url=${window.location.pathname}`);
-  if (pageType === 'home') setTimeout(() => scanHomePage(), 1000);
-  else if (pageType === 'watch') handleWatchPage();
-  else if (pageType === 'shorts') {
-    console.log(LOG, 'Shorts page detected, going back...');
-    window.history.back();
-  }
+  const url = window.location.pathname + window.location.search;
+  console.log(LOG, `Navigation [${myNavId}]: page=${pageType}, url=${url}`);
+
+  // Debounce: wait 600ms, then check if another navigation happened
+  setTimeout(() => {
+    if (myNavId !== navId) {
+      console.log(LOG, `Navigation [${myNavId}] superseded by [${navId}], skipping`);
+      return;
+    }
+    if (pageType === 'home') scanHomePage();
+    else if (pageType === 'watch') handleWatchPage();
+    else if (pageType === 'shorts') {
+      console.log(LOG, 'Shorts page detected, going back...');
+      window.history.back();
+    }
+  }, 600);
 }
 
 // ============================================================
@@ -903,11 +915,11 @@ function handlePageChange() {
 function setupNavigationListeners() {
   document.addEventListener('yt-navigate-finish', () => {
     console.log(LOG, 'yt-navigate-finish');
-    setTimeout(() => handlePageChange(), 500);
+    handlePageChange();
   });
   window.addEventListener('popstate', () => {
     console.log(LOG, 'popstate');
-    setTimeout(() => handlePageChange(), 500);
+    handlePageChange();
   });
 }
 

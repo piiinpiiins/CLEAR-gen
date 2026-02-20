@@ -50,6 +50,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       stats.totalDislikes++;
       stats.lastDislikedAt = Date.now();
       chrome.storage.local.set({ stats });
+      // Broadcast updated stats to all extension pages (popup)
+      chrome.runtime.sendMessage({ type: 'STATS_UPDATED', stats }).catch(() => {});
       sendResponse({ ok: true });
     });
     return true;
