@@ -761,23 +761,18 @@ async function waitForAdToFinish(maxWait = 120000) {
 
   const start = Date.now();
   while (Date.now() - start < maxWait) {
-    // Try to click "Skip Ad" button
-    const skipBtn = document.querySelector(
-      '.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, '
-      + 'button.ytp-ad-skip-button-modern, .ytp-ad-skip-button-container button'
-    );
+    // Observer handles clicking, but also try here as backup
+    const skipBtn = document.querySelector(AD_SKIP_SELECTORS);
     if (skipBtn && skipBtn.offsetParent !== null) {
-      console.log(LOG, 'Clicking Skip Ad button...');
       skipBtn.click();
-      await sleep(1000);
     }
 
     if (!await isAdPlaying()) {
       console.log(LOG, `Ad finished (waited ${Math.round((Date.now() - start) / 1000)}s)`);
-      await sleep(1000); // Give the actual video a moment to load
+      await sleep(500);
       return;
     }
-    await sleep(1000);
+    await sleep(500);
   }
   console.warn(LOG, 'Ad wait timeout, continuing anyway...');
 }
@@ -959,6 +954,26 @@ function setupNavigationListeners() {
   });
 }
 
+const AD_SKIP_SELECTORS = '.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, button.ytp-ad-skip-button-modern, .ytp-ad-skip-button-container button';
+
+function setupAdSkipObserver() {
+  // Try to click skip immediately if already present
+  function tryClickSkip() {
+    const btn = document.querySelector(AD_SKIP_SELECTORS);
+    if (btn && btn.offsetParent !== null) {
+      console.log(LOG, 'Auto-skipping ad (observer)');
+      btn.click();
+    }
+  }
+
+  // Watch for skip button appearing anywhere in the player
+  const observer = new MutationObserver(() => tryClickSkip());
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+
+  // Also poll every 500ms as a fallback (MutationObserver can miss some changes)
+  setInterval(tryClickSkip, 500);
+}
+
 function setupMessageListener() {
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'STATE_CHANGED') {
@@ -979,6 +994,7 @@ async function init() {
   } catch (_) { enabled = true; }
 
   console.log(LOG, `Initialized, enabled=${enabled}`);
+  setupAdSkipObserver();
   setupMessageListener();
   setupNavigationListeners();
   handlePageChange();
