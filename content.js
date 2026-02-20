@@ -670,6 +670,13 @@ async function scanHomePage() {
         const link = queryFirst(card, SELECTORS.cardLink);
         // Double-check: don't click into Shorts or Ads
         if (link && !link.href?.includes('/shorts/')) {
+          // Extract video ID from link and skip if already processed
+          const linkUrl = new URL(link.href, window.location.origin);
+          const cardVideoId = linkUrl.searchParams.get('v');
+          if (cardVideoId && processedVideoIds.has(cardVideoId)) {
+            console.log(LOG, `Skipping already processed: ${cardVideoId} 「${title.slice(0, 30)}」`);
+            continue;
+          }
           await randomDelay(500, 1500);
           console.log(LOG, `Opening video: 「${title.slice(0, 50)}」`);
           simulateClick(link);
@@ -740,7 +747,11 @@ async function clickDislike() {
 
 async function seekToEnd(secondsBeforeEnd = 2) {
   const player = await waitForPlayer(10000);
-  if (!player) { console.warn(LOG, 'Player not ready'); return; }
+  if (!player) { console.warn(LOG, 'Player not ready for seek'); return; }
+  if (!isFinite(player.duration) || player.duration <= 0) {
+    console.warn(LOG, `Cannot seek: duration=${player.duration}`);
+    return;
+  }
   player.currentTime = Math.max(0, player.duration - secondsBeforeEnd);
   await sleep(500);
   console.log(LOG, `Seeked to ${Math.round(player.currentTime)}s / ${Math.round(player.duration)}s`);
@@ -795,6 +806,16 @@ async function handleWatchPage() {
   if (!enabled) return;
   isRunning = true;
 
+  // Extract video ID early so we can mark it processed before any early return
+  const videoId = new URLSearchParams(window.location.search).get('v');
+  if (!videoId || processedVideoIds.has(videoId)) {
+    console.log(LOG, `Video ${videoId} already processed or no ID`);
+    await seekToEnd();
+    isRunning = false;
+    return;
+  }
+  processedVideoIds.add(videoId);
+
   await sleep(1000);
 
   // Quick live stream check — before anything else
@@ -815,15 +836,6 @@ async function handleWatchPage() {
 
   // Wait for any pre-roll ad to finish (or skip it)
   await waitForAdToFinish();
-
-  const videoId = new URLSearchParams(window.location.search).get('v');
-  if (!videoId || processedVideoIds.has(videoId)) {
-    console.log(LOG, `Video ${videoId} already processed or no ID`);
-    await seekToEnd();
-    isRunning = false;
-    return;
-  }
-  processedVideoIds.add(videoId);
 
   // Get title
   let title = '';
