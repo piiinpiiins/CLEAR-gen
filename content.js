@@ -803,39 +803,35 @@ async function isAdPlaying() {
   );
 }
 
-async function waitForAdToFinish(maxWait = 120000) {
+async function waitForAdToFinish(maxWait = 60000) {
   if (!await isAdPlaying()) return;
   console.log(LOG, 'Ad detected, waiting for it to finish...');
 
+  // Mute immediately
+  const video = document.querySelector('video.html5-main-video');
+  if (video) video.muted = true;
+
   const start = Date.now();
   while (Date.now() - start < maxWait) {
-    // Observer handles clicking, but also try here as backup
+    // Try to click skip (observer also handles this, but backup here)
     const result = findAdSkipButton();
     if (result) {
       console.log(LOG, `waitForAdToFinish: clicking skip [${result.selector}]`);
       simulateClick(result.btn);
       result.btn.click();
-      await sleep(300);
-    }
-
-    // Try muting the ad video to reduce annoyance while waiting
-    const video = document.querySelector('video.html5-main-video');
-    if (video && await isAdPlaying()) {
-      video.muted = true;
+      await sleep(500);
+      continue;
     }
 
     if (!await isAdPlaying()) {
       console.log(LOG, `Ad finished (waited ${Math.round((Date.now() - start) / 1000)}s)`);
-      // Unmute after ad
       if (video) video.muted = false;
       await sleep(500);
       return;
     }
-    await sleep(300);
+    await sleep(500);
   }
   console.warn(LOG, 'Ad wait timeout, continuing anyway...');
-  // Unmute on timeout too
-  const video = document.querySelector('video.html5-main-video');
   if (video) video.muted = false;
 }
 
@@ -1069,8 +1065,14 @@ function findAdSkipButton() {
 
 function setupAdSkipObserver() {
   let lastSkipLog = 0;
+  let lastTryTime = 0;
 
   function tryClickSkip() {
+    // Throttle: at most once per 500ms to avoid freezing the main thread
+    const now = Date.now();
+    if (now - lastTryTime < 500) return false;
+    lastTryTime = now;
+
     const result = findAdSkipButton();
     if (result) {
       const { btn, selector } = result;
@@ -1084,28 +1086,28 @@ function setupAdSkipObserver() {
       return true;
     }
 
-    // Debug: log ad state periodically (every 3s) when ad is playing but no skip button found
-    const now = Date.now();
-    if (now - lastSkipLog > 3000) {
+    // Debug: log ad state periodically (every 5s)
+    if (now - lastSkipLog > 5000) {
       const playerContainer = document.querySelector('#movie_player, .html5-video-player');
       const isAd = playerContainer && (
         playerContainer.classList.contains('ad-showing') ||
         playerContainer.classList.contains('ad-interrupting')
       );
       if (isAd) {
-        console.log(LOG, 'Ad playing but no skip button found yet');
+        console.log(LOG, 'Ad playing, no skip button (unskippable ad — waiting for it to end)');
         lastSkipLog = now;
       }
     }
     return false;
   }
 
-  // Watch for skip button appearing anywhere in the player
+  // Watch for skip button — only on the player container, not entire body
+  const playerEl = document.querySelector('#movie_player') || document.body;
   const observer = new MutationObserver(() => tryClickSkip());
-  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+  observer.observe(playerEl, { childList: true, subtree: true });
 
-  // Poll every 300ms as a fallback (faster than before)
-  setInterval(tryClickSkip, 300);
+  // Poll every 500ms as fallback
+  setInterval(tryClickSkip, 500);
 }
 
 function setupMessageListener() {
