@@ -616,6 +616,12 @@ let isRunning = false;
 const scannedCards = new WeakSet();
 const processedVideoIds = new Set();
 
+function goHome() {
+  // Navigate to YouTube homepage directly — avoids playlist traps where
+  // history.back() lands on another playlist video instead of the homepage
+  window.location.href = '/';
+}
+
 // ============================================================
 // SECTION 5: PHASE 1 — HOME PAGE SCAN + BADGE
 // ============================================================
@@ -810,122 +816,134 @@ async function handleWatchPage() {
   const videoId = new URLSearchParams(window.location.search).get('v');
   if (!videoId || processedVideoIds.has(videoId)) {
     console.log(LOG, `Video ${videoId} already processed or no ID`);
-    await seekToEnd();
+    goHome();
     isRunning = false;
     return;
   }
   processedVideoIds.add(videoId);
 
-  await sleep(1000);
+  // Global timeout — abort if handleWatchPage takes too long
+  const watchAbort = { aborted: false };
+  const watchTimer = setTimeout(() => {
+    watchAbort.aborted = true;
+    console.warn(LOG, `handleWatchPage timeout (45s) for ${videoId}, aborting`);
+  }, 45000);
 
-  // Quick live stream check — before anything else
-  const quickLiveBadge = document.querySelector('.ytp-live-badge');
-  const quickBadgeVisible = quickLiveBadge && quickLiveBadge.offsetParent !== null && getComputedStyle(quickLiveBadge).display !== 'none';
-  const quickVideoEl = document.querySelector('video.html5-main-video') || document.querySelector('video');
-  const quickDurInfinite = quickVideoEl && quickVideoEl.duration === Infinity;
-  // DVR live streams: finite duration > 12h + title has LIVE/直播
-  const quickTitle = document.querySelector('ytd-watch-metadata h1 yt-formatted-string')?.textContent?.trim() || '';
-  const quickDurDVR = quickVideoEl && quickVideoEl.duration > 43200
-    && /LIVE|直播|ライブ|24.*小時|24.*hours?/i.test(quickTitle);
-  if (quickBadgeVisible || quickDurInfinite || quickDurDVR) {
-    console.log(LOG, `Live stream detected instantly (badge=${quickBadgeVisible}, dur=${quickVideoEl?.duration}, dvr=${quickDurDVR}): 「${quickTitle}」`);
-    window.history.back();
-    isRunning = false;
-    return;
-  }
+  try {
+    await sleep(1000);
+    if (watchAbort.aborted) return;
 
-  // Wait for any pre-roll ad to finish (or skip it)
-  await waitForAdToFinish();
-
-  // Get title
-  let title = '';
-  for (let i = 0; i < 5; i++) {
-    const titleEl = queryFirst(document, SELECTORS.watchTitle);
-    title = titleEl?.textContent?.trim() || '';
-    if (title) break;
-    await sleep(500);
-  }
-
-  // Get channel name
-  let channelName = '';
-  for (let i = 0; i < 3; i++) {
-    const channelEl = queryFirst(document, SELECTORS.watchChannelName);
-    channelName = channelEl?.textContent?.trim() || '';
-    if (channelName) break;
-    await sleep(500);
-  }
-
-  console.log(LOG, `Watch: 「${title}」 ch:「${channelName}」 (${videoId})`);
-
-  // Early live stream detection — check BEFORE waiting for player
-  const earlyLiveBadge = document.querySelector('.ytp-live-badge');
-  const earlyBadgeVisible = earlyLiveBadge && earlyLiveBadge.offsetParent !== null && getComputedStyle(earlyLiveBadge).display !== 'none';
-  const earlyVideoEl = document.querySelector('video.html5-main-video') || document.querySelector('video');
-  const earlyDurationInfinite = earlyVideoEl && earlyVideoEl.duration === Infinity;
-
-  if (earlyBadgeVisible || earlyDurationInfinite) {
-    console.log(LOG, `Live stream detected early (badge=${earlyBadgeVisible}, dur=${earlyVideoEl?.duration}), going back: 「${title}」`);
-    window.history.back();
-    isRunning = false;
-    return;
-  }
-
-  // Wait for player to load metadata
-  await waitForAdToFinish();
-  const player = await waitForPlayer(10000);
-
-  if (!player) {
-    // Player didn't load — recheck live stream
-    const videoEl = document.querySelector('video.html5-main-video') || document.querySelector('video');
-    const liveBadge = document.querySelector('.ytp-live-badge');
-    const badgeVisible = liveBadge && liveBadge.offsetParent !== null && getComputedStyle(liveBadge).display !== 'none';
-    const durationInfinite = videoEl && videoEl.duration === Infinity;
-
-    console.log(LOG, `Player not ready. liveBadge=${!!liveBadge}, badgeVisible=${badgeVisible}, duration=${videoEl?.duration}`);
-
-    if (badgeVisible || durationInfinite) {
-      console.log(LOG, `Live stream confirmed, going back: 「${title}」`);
-      window.history.back();
-      isRunning = false;
+    // Quick live stream check — before anything else
+    const quickLiveBadge = document.querySelector('.ytp-live-badge');
+    const quickBadgeVisible = quickLiveBadge && quickLiveBadge.offsetParent !== null && getComputedStyle(quickLiveBadge).display !== 'none';
+    const quickVideoEl = document.querySelector('video.html5-main-video') || document.querySelector('video');
+    const quickDurInfinite = quickVideoEl && quickVideoEl.duration === Infinity;
+    // DVR live streams: finite duration > 12h + title has LIVE/直播
+    const quickTitle = document.querySelector('ytd-watch-metadata h1 yt-formatted-string')?.textContent?.trim() || '';
+    const quickDurDVR = quickVideoEl && quickVideoEl.duration > 43200
+      && /LIVE|直播|ライブ|24.*小時|24.*hours?/i.test(quickTitle);
+    if (quickBadgeVisible || quickDurInfinite || quickDurDVR) {
+      console.log(LOG, `Live stream detected instantly (badge=${quickBadgeVisible}, dur=${quickVideoEl?.duration}, dvr=${quickDurDVR}): 「${quickTitle}」`);
+      goHome();
       return;
     }
-    console.log(LOG, 'Not live, player slow — continuing...');
-  } else {
-    // Player loaded — check for extremely long videos that might be live
-    const dur = player.duration;
-    console.log(LOG, `Player ready: duration=${Math.round(dur)}s`);
-    if (dur > 43200 && /LIVE|直播|ライブ/i.test(title)) {
-      console.log(LOG, `Very long video with LIVE in title, going back: 「${title}」`);
-      window.history.back();
-      isRunning = false;
+
+    // Wait for any pre-roll ad to finish (or skip it)
+    await waitForAdToFinish();
+    if (watchAbort.aborted) return;
+
+    // Get title
+    let title = '';
+    for (let i = 0; i < 5; i++) {
+      const titleEl = queryFirst(document, SELECTORS.watchTitle);
+      title = titleEl?.textContent?.trim() || '';
+      if (title) break;
+      await sleep(500);
+    }
+
+    // Get channel name
+    let channelName = '';
+    for (let i = 0; i < 3; i++) {
+      const channelEl = queryFirst(document, SELECTORS.watchChannelName);
+      channelName = channelEl?.textContent?.trim() || '';
+      if (channelName) break;
+      await sleep(500);
+    }
+
+    console.log(LOG, `Watch: 「${title}」 ch:「${channelName}」 (${videoId})`);
+    if (watchAbort.aborted) return;
+
+    // Early live stream detection — check BEFORE waiting for player
+    const earlyLiveBadge = document.querySelector('.ytp-live-badge');
+    const earlyBadgeVisible = earlyLiveBadge && earlyLiveBadge.offsetParent !== null && getComputedStyle(earlyLiveBadge).display !== 'none';
+    const earlyVideoEl = document.querySelector('video.html5-main-video') || document.querySelector('video');
+    const earlyDurationInfinite = earlyVideoEl && earlyVideoEl.duration === Infinity;
+
+    if (earlyBadgeVisible || earlyDurationInfinite) {
+      console.log(LOG, `Live stream detected early (badge=${earlyBadgeVisible}, dur=${earlyVideoEl?.duration}), going back: 「${title}」`);
+      goHome();
       return;
     }
-  }
 
-  // Inject watch page badge
-  const watchResult = injectWatchPageBadge(title, channelName);
-  const result = watchResult || analyzeVideo(title, channelName);
+    // Wait for player to load metadata
+    const player = await waitForPlayer(10000);
+    if (watchAbort.aborted) return;
 
-  if (result.shouldAct) {
-    const cats = result.categoriesDetected;
-    console.log(LOG, `Disliking [${cats.join(', ')}]: 「${title}」`);
-    const success = await clickDislike();
-    if (success) {
-      console.log(LOG, `Dislike confirmed: 「${title}」`);
-      try { chrome.runtime.sendMessage({ type: 'DISLIKE_RECORDED' }); } catch (_) {}
+    if (!player) {
+      // Player didn't load — recheck live stream
+      const videoEl = document.querySelector('video.html5-main-video') || document.querySelector('video');
+      const liveBadge = document.querySelector('.ytp-live-badge');
+      const badgeVisible = liveBadge && liveBadge.offsetParent !== null && getComputedStyle(liveBadge).display !== 'none';
+      const durationInfinite = videoEl && videoEl.duration === Infinity;
+
+      console.log(LOG, `Player not ready. liveBadge=${!!liveBadge}, badgeVisible=${badgeVisible}, duration=${videoEl?.duration}`);
+
+      if (badgeVisible || durationInfinite) {
+        console.log(LOG, `Live stream confirmed, going back: 「${title}」`);
+        goHome();
+        return;
+      }
+      console.log(LOG, 'Not live, player slow — continuing...');
     } else {
-      console.warn(LOG, `Dislike failed: 「${title}」`);
+      // Player loaded — check for extremely long videos that might be live
+      const dur = player.duration;
+      console.log(LOG, `Player ready: duration=${Math.round(dur)}s`);
+      if (dur > 43200 && /LIVE|直播|ライブ/i.test(title)) {
+        console.log(LOG, `Very long video with LIVE in title, going back: 「${title}」`);
+        goHome();
+        return;
+      }
     }
-    console.log(LOG, 'Seeking to last 2 seconds...');
-    await seekToEnd(2);
-  } else {
-    console.log(LOG, `Clean: 「${title}」, going back...`);
-    await seekToEnd(2);
-    await sleep(500);
-    window.history.back();
-  }
 
-  isRunning = false;
+    // Inject watch page badge
+    const watchResult = injectWatchPageBadge(title, channelName);
+    const result = watchResult || analyzeVideo(title, channelName);
+
+    if (result.shouldAct) {
+      const cats = result.categoriesDetected;
+      console.log(LOG, `Disliking [${cats.join(', ')}]: 「${title}」`);
+      const success = await clickDislike();
+      if (watchAbort.aborted) return;
+      if (success) {
+        console.log(LOG, `Dislike confirmed: 「${title}」`);
+        try { chrome.runtime.sendMessage({ type: 'DISLIKE_RECORDED' }); } catch (_) {}
+      } else {
+        console.warn(LOG, `Dislike failed: 「${title}」`);
+      }
+      console.log(LOG, 'Seeking to last 2 seconds...');
+      await seekToEnd(2);
+    } else {
+      console.log(LOG, `Clean: 「${title}」, going back...`);
+      await seekToEnd(2);
+    }
+
+    // Always go back to homepage after processing (avoid playlist traps)
+    await sleep(500);
+    goHome();
+  } finally {
+    clearTimeout(watchTimer);
+    isRunning = false;
+  }
 }
 
 // ============================================================
