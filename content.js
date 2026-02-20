@@ -706,7 +706,38 @@ async function scanHomePage() {
 // SECTION 6: PHASE 2 — WATCH PAGE: DISLIKE + SEEK
 // ============================================================
 
+function dismissOverlays() {
+  // Close chat replay / featured chat messages panel (重點聊天訊息)
+  const chatCloseSelectors = [
+    'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-live-chat-replay"] #close-button button',
+    'ytd-engagement-panel-section-list-renderer[visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"] #close-button button',
+    '#chat-container #close-button button',
+    'ytd-live-chat-frame #close-button button',
+    'tp-yt-paper-dialog .yt-spec-button-shape-next--call-to-action',  // generic dialog dismiss
+  ];
+  for (const sel of chatCloseSelectors) {
+    const btn = document.querySelector(sel);
+    if (btn && btn.offsetParent !== null) {
+      console.log(LOG, `Closing overlay: ${sel}`);
+      btn.click();
+    }
+  }
+  // Also try to collapse engagement panels that might block buttons
+  const panels = document.querySelectorAll('ytd-engagement-panel-section-list-renderer[visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED"]');
+  for (const panel of panels) {
+    const closeBtn = panel.querySelector('#close-button button, yt-icon-button#close-button');
+    if (closeBtn) {
+      console.log(LOG, 'Closing engagement panel');
+      closeBtn.click();
+    }
+  }
+}
+
 async function clickDislike() {
+  // Dismiss overlays that might block the dislike button (e.g. chat replay panel)
+  dismissOverlays();
+  await sleep(300);
+
   const alreadyPressed = queryFirst(document, SELECTORS.dislikePressed);
   if (alreadyPressed) { console.log(LOG, 'Already disliked'); return true; }
 
