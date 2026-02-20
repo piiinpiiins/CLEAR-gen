@@ -762,19 +762,33 @@ async function waitForAdToFinish(maxWait = 120000) {
   const start = Date.now();
   while (Date.now() - start < maxWait) {
     // Observer handles clicking, but also try here as backup
-    const skipBtn = document.querySelector(AD_SKIP_SELECTORS);
-    if (skipBtn && skipBtn.offsetParent !== null) {
-      skipBtn.click();
+    const result = findAdSkipButton();
+    if (result) {
+      console.log(LOG, `waitForAdToFinish: clicking skip [${result.selector}]`);
+      simulateClick(result.btn);
+      result.btn.click();
+      await sleep(300);
+    }
+
+    // Try muting the ad video to reduce annoyance while waiting
+    const video = document.querySelector('video.html5-main-video');
+    if (video && await isAdPlaying()) {
+      video.muted = true;
     }
 
     if (!await isAdPlaying()) {
       console.log(LOG, `Ad finished (waited ${Math.round((Date.now() - start) / 1000)}s)`);
+      // Unmute after ad
+      if (video) video.muted = false;
       await sleep(500);
       return;
     }
-    await sleep(500);
+    await sleep(300);
   }
   console.warn(LOG, 'Ad wait timeout, continuing anyway...');
+  // Unmute on timeout too
+  const video = document.querySelector('video.html5-main-video');
+  if (video) video.muted = false;
 }
 
 async function handleWatchPage() {
@@ -954,24 +968,83 @@ function setupNavigationListeners() {
   });
 }
 
-const AD_SKIP_SELECTORS = '.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern, button.ytp-ad-skip-button-modern, .ytp-ad-skip-button-container button';
+const AD_SKIP_SELECTORS = [
+  '.ytp-skip-ad-button',
+  '.ytp-ad-skip-button',
+  '.ytp-ad-skip-button-modern',
+  'button.ytp-ad-skip-button-modern',
+  '.ytp-ad-skip-button-container button',
+  '.ytp-ad-skip-button-slot button',
+  '.ytp-ad-skip-button-slot .ytp-ad-skip-button-modern',
+  '.videoAdUiSkipButton',
+  '#skip-button button',
+  '.ytp-ad-overlay-close-button',
+];
+
+function findAdSkipButton() {
+  for (const sel of AD_SKIP_SELECTORS) {
+    const btn = document.querySelector(sel);
+    if (btn && btn.offsetParent !== null) {
+      return { btn, selector: sel };
+    }
+  }
+  // Also check inside shadow DOM of yt-button-shape elements in ad area
+  const adArea = document.querySelector('.ytp-ad-skip-button-slot, .ytp-ad-skip-button-container');
+  if (adArea) {
+    const shapes = adArea.querySelectorAll('yt-button-shape');
+    for (const shape of shapes) {
+      const root = shape.shadowRoot;
+      if (root) {
+        const btn = root.querySelector('button');
+        if (btn && btn.offsetParent !== null) return { btn, selector: 'shadow:yt-button-shape>button' };
+      }
+      // Also try non-shadow children
+      const btn = shape.querySelector('button');
+      if (btn && btn.offsetParent !== null) return { btn, selector: 'yt-button-shape>button' };
+    }
+  }
+  return null;
+}
 
 function setupAdSkipObserver() {
-  // Try to click skip immediately if already present
+  let lastSkipLog = 0;
+
   function tryClickSkip() {
-    const btn = document.querySelector(AD_SKIP_SELECTORS);
-    if (btn && btn.offsetParent !== null) {
-      console.log(LOG, 'Auto-skipping ad (observer)');
-      btn.click();
+    const result = findAdSkipButton();
+    if (result) {
+      const { btn, selector } = result;
+      console.log(LOG, `Ad skip button found [${selector}], clicking...`);
+      simulateClick(btn);
+      // Fallback clicks
+      setTimeout(() => {
+        btn.click();
+        btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      }, 50);
+      return true;
     }
+
+    // Debug: log ad state periodically (every 3s) when ad is playing but no skip button found
+    const now = Date.now();
+    if (now - lastSkipLog > 3000) {
+      const playerContainer = document.querySelector('#movie_player, .html5-video-player');
+      const isAd = playerContainer && (
+        playerContainer.classList.contains('ad-showing') ||
+        playerContainer.classList.contains('ad-interrupting')
+      );
+      if (isAd) {
+        console.log(LOG, 'Ad playing but no skip button found yet');
+        lastSkipLog = now;
+      }
+    }
+    return false;
   }
 
   // Watch for skip button appearing anywhere in the player
   const observer = new MutationObserver(() => tryClickSkip());
   observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
 
-  // Also poll every 500ms as a fallback (MutationObserver can miss some changes)
-  setInterval(tryClickSkip, 500);
+  // Poll every 300ms as a fallback (faster than before)
+  setInterval(tryClickSkip, 300);
 }
 
 function setupMessageListener() {
