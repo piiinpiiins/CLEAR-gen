@@ -803,36 +803,67 @@ async function isAdPlaying() {
   );
 }
 
+function tryFastForwardAd() {
+  const video = document.querySelector('video.html5-main-video');
+  if (!video) return false;
+
+  // Strategy 1: Jump to end of ad
+  if (isFinite(video.duration) && video.duration > 0) {
+    video.currentTime = video.duration;
+    console.log(LOG, `Fast-forwarded ad: currentTime → ${video.duration}s`);
+    return true;
+  }
+
+  // Strategy 2: Max playback speed
+  if (video.playbackRate < 16) {
+    video.playbackRate = 16;
+    console.log(LOG, 'Fast-forwarding ad at 16x speed');
+    return true;
+  }
+
+  return false;
+}
+
 async function waitForAdToFinish(maxWait = 60000) {
   if (!await isAdPlaying()) return;
   console.log(LOG, 'Ad detected, waiting for it to finish...');
 
-  // Mute immediately
   const video = document.querySelector('video.html5-main-video');
   if (video) video.muted = true;
 
+  // Primary strategy: fast-forward the ad
+  tryFastForwardAd();
+
+  let failedClickCount = 0;
   const start = Date.now();
   while (Date.now() - start < maxWait) {
-    // Try to click skip (observer also handles this, but backup here)
-    const result = findAdSkipButton();
-    if (result) {
-      console.log(LOG, `waitForAdToFinish: clicking skip [${result.selector}]`);
-      simulateClick(result.btn);
-      result.btn.click();
-      await sleep(500);
-      continue;
-    }
-
     if (!await isAdPlaying()) {
       console.log(LOG, `Ad finished (waited ${Math.round((Date.now() - start) / 1000)}s)`);
-      if (video) video.muted = false;
-      await sleep(500);
-      return;
+      break;
     }
-    await sleep(500);
+
+    // Re-try fast-forward periodically (handles ad pods / multi-ad sequences)
+    tryFastForwardAd();
+
+    // Secondary strategy: try skip button (max 5 attempts)
+    if (failedClickCount < 5) {
+      const result = findAdSkipButton();
+      if (result) {
+        console.log(LOG, `waitForAdToFinish: clicking skip [${result.selector}]`);
+        simulateClick(result.btn);
+        result.btn.click();
+        failedClickCount++;
+      }
+    }
+
+    await sleep(1000);
   }
-  console.warn(LOG, 'Ad wait timeout, continuing anyway...');
-  if (video) video.muted = false;
+
+  // Restore normal playback state
+  if (video) {
+    video.muted = false;
+    video.playbackRate = 1;
+  }
 }
 
 async function handleWatchPage() {
@@ -1042,14 +1073,20 @@ function findAdSkipButton() {
   for (const sel of AD_SKIP_SELECTORS) {
     const el = document.querySelector(sel);
     if (!el || el.offsetParent === null) continue;
-    // If matched element is a container (div/span), find the actual <button> inside
-    if (el.tagName !== 'BUTTON') {
-      const innerBtn = el.querySelector('button');
-      if (innerBtn && innerBtn.offsetParent !== null) {
-        return { btn: innerBtn, selector: sel + '>button' };
-      }
+
+    // If the element IS a button or role="button", return it directly
+    if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button') {
+      return { btn: el, selector: sel };
     }
-    return { btn: el, selector: sel };
+
+    // It's a container (div/span) — drill into it for a real button
+    const innerBtn = el.querySelector('button, [role="button"]');
+    if (innerBtn && innerBtn.offsetParent !== null) {
+      return { btn: innerBtn, selector: sel + '>button' };
+    }
+
+    // No clickable button inside — skip this element, do NOT return the div
+    continue;
   }
   // Also check inside shadow DOM of yt-button-shape elements in ad area
   const adArea = document.querySelector('.ytp-ad-skip-button-slot, .ytp-ad-skip-button-container');
@@ -1086,23 +1123,36 @@ function setupAdSkipObserver() {
       playerContainer.classList.contains('ad-interrupting')
     );
 
-    // Reset failed count when ad state changes (new ad started)
+    // Track ad state transitions
     if (isAd !== lastAdState) {
+      if (!isAd && lastAdState) {
+        // Ad just ended — restore normal playback
+        const video = document.querySelector('video.html5-main-video');
+        if (video) {
+          video.playbackRate = 1;
+          video.muted = false;
+        }
+        console.log(LOG, 'Ad ended, restored playbackRate=1');
+      }
       failedClickCount = 0;
       lastAdState = isAd;
     }
 
     if (!isAd) return false;
 
-    // After 5 failed clicks on the same ad, stop spamming — it's unskippable
+    // Primary: fast-forward the ad
+    tryFastForwardAd();
+
+    // After 5 failed skip clicks, stop trying the button — rely on fast-forward
     if (failedClickCount >= 5) {
       if (now - lastSkipLog > 10000) {
-        console.log(LOG, 'Unskippable ad — waiting for it to end');
+        console.log(LOG, 'Skip button ineffective — relying on fast-forward');
         lastSkipLog = now;
       }
       return false;
     }
 
+    // Secondary: try skip button
     const result = findAdSkipButton();
     if (result) {
       const { btn, selector } = result;
@@ -1116,9 +1166,9 @@ function setupAdSkipObserver() {
       return true;
     }
 
-    // No skip button found at all
+    // No skip button found
     if (now - lastSkipLog > 5000) {
-      console.log(LOG, 'Ad playing, no skip button yet');
+      console.log(LOG, 'Ad playing, fast-forwarding, no skip button yet');
       lastSkipLog = now;
     }
     return false;
