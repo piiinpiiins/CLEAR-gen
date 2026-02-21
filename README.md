@@ -7,7 +7,7 @@ Chrome extension that automatically detects and dislikes suspicious YouTube vide
 1. **Scans YouTube homepage** — identifies suspicious video cards using regex-based pattern matching
 2. **Badges thumbnails** — overlays red/yellow/green severity badges on detected cards
 3. **Auto-dislikes** — clicks into detected videos, presses dislike, seeks to end, then moves on
-4. **Handles edge cases** — skips live streams, Shorts, ads; auto-skips pre-roll ads; debounces SPA navigation
+4. **Handles edge cases** — skips live streams, Shorts, ads; fast-forwards pre-roll ads; dismisses chat overlays; 45s global timeout; debounces SPA navigation
 
 ## Detection Categories
 
@@ -28,12 +28,13 @@ Severity mapping:
 
 ```
 manifest.json          Manifest V3
-content.js             Main content script (~1000 lines)
+content.js             Main content script (~1200 lines)
                        - Detection engine (regex patterns)
                        - Badge overlay injection
                        - Homepage scan loop
-                       - Watch page handler (dislike + seek)
-                       - Ad skip observer (MutationObserver + polling)
+                       - Watch page handler (dislike + seek + 45s timeout)
+                       - Overlay dismissal (chat replay, engagement panels)
+                       - Ad handling (fast-forward + skip button + MutationObserver)
                        - Live stream detection (3-layer)
                        - SPA navigation handling with debounce
 background.js          Service worker
@@ -50,7 +51,7 @@ icons/                 Extension icons (16, 48, 128)
 ## Key Technical Details
 
 - **Dislike clicking**: Uses full `PointerEvent` + `MouseEvent` simulation sequence with 3-fallback chain (simulateClick → .click() → focus+Enter)
-- **Ad skipping**: `MutationObserver` on `document.body` + 300ms interval polling; expanded selectors including shadow DOM inside `yt-button-shape`
+- **Ad skipping**: Primary strategy is `video.currentTime = duration` (fast-forward to end); fallback `playbackRate = 16`; skip button as secondary (5-attempt cap). `MutationObserver` on `#movie_player` with 500ms throttle + 1s polling; restores `playbackRate=1` when ad ends
 - **Live stream detection**: 3-layer instant check — (1) visible `.ytp-live-badge`, (2) `duration === Infinity`, (3) DVR heuristic (`duration > 43200` + LIVE/直播 in title)
 - **Navigation**: Listens to `yt-navigate-finish` + `popstate` with `navId` debounce counter (600ms)
 - **Chinese aria-labels**: Dislike button uses `aria-label="對這部影片表示不喜歡"` on zh-TW YouTube
