@@ -3,15 +3,25 @@
   "name": "CLEAR-gen",
   "version": "1.0.0",
   "description": "Auto-dislike YouTube videos",
-  "permissions": ["storage"],
-  "host_permissions": ["*://www.youtube.com/*"],
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "*://www.youtube.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["*://www.youtube.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "*://www.youtube.com/*"
+      ],
+      "js": [
+        "AI/ai-warfare-patterns.js",
+        "AI/detector.js",
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],

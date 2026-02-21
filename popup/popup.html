@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="popup.css">
   <title>CLEAR-gen</title>
 </head>
+
 <body>
   <div class="container">
     <div class="header">
@@ -22,9 +24,42 @@
     </div>
 
     <div class="stats">
-      <div class="stat-item">
+      <div class="stat-item stat-total">
         <span class="stat-value" id="totalDislikes">0</span>
         <span class="stat-label">Total Dislikes</span>
+      </div>
+    </div>
+
+    <div class="category-stats" id="categoryStats">
+      <div class="cat-row">
+        <span class="cat-dot cat-dot--red"></span>
+        <span class="cat-name">對台認知作戰</span>
+        <span class="cat-count" id="cat-china_propaganda">0</span>
+      </div>
+      <div class="cat-row">
+        <span class="cat-dot cat-dot--purple"></span>
+        <span class="cat-name">AI 生成影片</span>
+        <span class="cat-count" id="cat-ai_generated">0</span>
+      </div>
+      <div class="cat-row">
+        <span class="cat-dot cat-dot--red"></span>
+        <span class="cat-name">AI 假知識</span>
+        <span class="cat-count" id="cat-ai_fake_knowledge">0</span>
+      </div>
+      <div class="cat-row">
+        <span class="cat-dot cat-dot--yellow"></span>
+        <span class="cat-name">內容農場</span>
+        <span class="cat-count" id="cat-content_farm">0</span>
+      </div>
+      <div class="cat-row">
+        <span class="cat-dot cat-dot--yellow"></span>
+        <span class="cat-name">中國來源頻道</span>
+        <span class="cat-count" id="cat-china_origin">0</span>
+      </div>
+      <div class="cat-row">
+        <span class="cat-dot cat-dot--green"></span>
+        <span class="cat-name">簡體字內容</span>
+        <span class="cat-count" id="cat-simplified_chinese">0</span>
       </div>
     </div>
 
@@ -33,4 +68,5 @@
 
   <script src="popup.js"></script>
 </body>
+
 </html>

@@ -3,10 +3,22 @@ const statusDot = document.getElementById('statusDot');
 const totalDislikes = document.getElementById('totalDislikes');
 const resetBtn = document.getElementById('resetBtn');
 
+const CATEGORY_IDS = [
+  'simplified_chinese', 'content_farm', 'ai_fake_knowledge',
+  'china_propaganda', 'china_origin', 'ai_generated',
+];
+
 function updateUI(enabled, stats) {
   toggleSwitch.checked = enabled;
   statusDot.classList.toggle('active', enabled);
   totalDislikes.textContent = stats?.totalDislikes ?? 0;
+
+  // Update per-category counts
+  const byCategory = stats?.byCategory || {};
+  for (const cat of CATEGORY_IDS) {
+    const el = document.getElementById(`cat-${cat}`);
+    if (el) el.textContent = byCategory[cat] ?? 0;
+  }
 }
 
 // Load state on popup open
@@ -28,6 +40,10 @@ toggleSwitch.addEventListener('change', () => {
 resetBtn.addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: 'RESET_STATS' }, () => {
     totalDislikes.textContent = '0';
+    for (const cat of CATEGORY_IDS) {
+      const el = document.getElementById(`cat-${cat}`);
+      if (el) el.textContent = '0';
+    }
   });
 });
 
@@ -35,5 +51,10 @@ resetBtn.addEventListener('click', () => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'STATS_UPDATED' && msg.stats) {
     totalDislikes.textContent = msg.stats.totalDislikes ?? 0;
+    const byCategory = msg.stats.byCategory || {};
+    for (const cat of CATEGORY_IDS) {
+      const el = document.getElementById(`cat-${cat}`);
+      if (el) el.textContent = byCategory[cat] ?? 0;
+    }
   }
 });
