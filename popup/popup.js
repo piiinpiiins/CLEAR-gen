@@ -1,6 +1,7 @@
 const toggleSwitch = document.getElementById('toggleSwitch');
 const statusDot = document.getElementById('statusDot');
 const totalDislikes = document.getElementById('totalDislikes');
+const totalDontRecommend = document.getElementById('totalDontRecommend');
 const resetBtn = document.getElementById('resetBtn');
 
 const CATEGORY_IDS = [
@@ -12,6 +13,7 @@ function updateUI(enabled, stats) {
   toggleSwitch.checked = enabled;
   statusDot.classList.toggle('active', enabled);
   totalDislikes.textContent = stats?.totalDislikes ?? 0;
+  if (totalDontRecommend) totalDontRecommend.textContent = stats?.totalDontRecommend ?? 0;
 
   // Update per-category counts
   const byCategory = stats?.byCategory || {};
@@ -40,6 +42,7 @@ toggleSwitch.addEventListener('change', () => {
 resetBtn.addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: 'RESET_STATS' }, () => {
     totalDislikes.textContent = '0';
+    if (totalDontRecommend) totalDontRecommend.textContent = '0';
     for (const cat of CATEGORY_IDS) {
       const el = document.getElementById(`cat-${cat}`);
       if (el) el.textContent = '0';
@@ -51,6 +54,7 @@ resetBtn.addEventListener('click', () => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'STATS_UPDATED' && msg.stats) {
     totalDislikes.textContent = msg.stats.totalDislikes ?? 0;
+    if (totalDontRecommend) totalDontRecommend.textContent = msg.stats.totalDontRecommend ?? 0;
     const byCategory = msg.stats.byCategory || {};
     for (const cat of CATEGORY_IDS) {
       const el = document.getElementById(`cat-${cat}`);

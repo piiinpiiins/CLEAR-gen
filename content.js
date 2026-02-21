@@ -68,6 +68,13 @@ const SELECTORS = {
   ],
 };
 
+// Text variants for "Don't recommend channel" across locales
+const DONT_RECOMMEND_TEXT = [
+  '不要推薦這個頻道',     // zh-TW
+  '不推荐此频道',         // zh-CN
+  "Don't recommend channel", // en
+];
+
 // ============================================================
 // SECTION 2c: BADGE CSS INJECTION
 // ============================================================
@@ -281,6 +288,86 @@ function simulateClick(element) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function randomDelay(min, max) { return sleep(min + Math.random() * (max - min)); }
 
+async function clickDontRecommend(card) {
+  try {
+    // Step 1: Find the ⋮ menu button on this card
+    const menuRenderer = card.querySelector('ytd-menu-renderer');
+    if (!menuRenderer) {
+      console.warn(LOG, 'clickDontRecommend: no ytd-menu-renderer on card');
+      return false;
+    }
+    const menuBtn = menuRenderer.querySelector('button')
+      || menuRenderer.querySelector('yt-icon-button');
+    if (!menuBtn) {
+      console.warn(LOG, 'clickDontRecommend: no menu button found');
+      return false;
+    }
+
+    // Step 2: Click ⋮ to open popup
+    console.log(LOG, 'clickDontRecommend: opening ⋮ menu...');
+    simulateClick(menuBtn);
+    await randomDelay(400, 800);
+
+    // Step 3: Wait for popup to render (appears at body level)
+    let menuPopup = null;
+    for (let i = 0; i < 10; i++) {
+      const popups = document.querySelectorAll('ytd-menu-popup-renderer');
+      if (popups.length > 0) {
+        const candidate = popups[popups.length - 1];
+        if (candidate.offsetParent !== null || getComputedStyle(candidate).display !== 'none') {
+          menuPopup = candidate;
+          break;
+        }
+      }
+      await sleep(200);
+    }
+    if (!menuPopup) {
+      console.warn(LOG, 'clickDontRecommend: popup did not appear');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return false;
+    }
+
+    // Step 4: Find "Don't recommend channel" by text content
+    const menuItems = menuPopup.querySelectorAll(
+      'ytd-menu-service-item-renderer, tp-yt-paper-item'
+    );
+    let targetItem = null;
+    for (const item of menuItems) {
+      const text = item.textContent?.trim() || '';
+      if (DONT_RECOMMEND_TEXT.some(v => text.includes(v))) {
+        targetItem = item;
+        break;
+      }
+    }
+    if (!targetItem) {
+      console.warn(LOG, 'clickDontRecommend: option not found. Menu items:');
+      for (const item of menuItems) {
+        console.log(LOG, `  "${item.textContent?.trim()}"`);
+      }
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await sleep(300);
+      return false;
+    }
+
+    // Step 5: Click the option
+    console.log(LOG, `clickDontRecommend: clicking "${targetItem.textContent?.trim()}"`);
+    await randomDelay(200, 500);
+    simulateClick(targetItem);
+    await sleep(500);
+    // Fallback: also try inner tp-yt-paper-item
+    const inner = targetItem.querySelector('tp-yt-paper-item');
+    if (inner) inner.click();
+
+    console.log(LOG, 'clickDontRecommend: SUCCESS');
+    await sleep(800);
+    return true;
+  } catch (err) {
+    console.error(LOG, 'clickDontRecommend error:', err);
+    try { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch (_) {}
+    return false;
+  }
+}
+
 async function waitForPlayer(timeout = 10000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
@@ -377,6 +464,19 @@ async function scanHomePage() {
             console.log(LOG, `Skipping already processed: ${cardVideoId} 「${title.slice(0, 30)}」`);
             continue;
           }
+
+          // Try "Don't recommend channel" first (more effective than dislike)
+          const dontRecommendOk = await clickDontRecommend(card);
+          if (dontRecommendOk) {
+            if (cardVideoId) processedVideoIds.add(cardVideoId);
+            try {
+              chrome.runtime.sendMessage({ type: 'DONT_RECOMMEND_RECORDED', categories: cats });
+            } catch (_) {}
+            await randomDelay(1000, 2000);
+            continue; // Card removed by YouTube, scan next
+          }
+
+          // Fallback: click into video for dislike flow
           await randomDelay(500, 1500);
           console.log(LOG, `Opening video: 「${title.slice(0, 50)}」`);
           simulateClick(link);

@@ -4,6 +4,7 @@ const DEFAULT_STATE = {
   enabled: true,
   stats: {
     totalDislikes: 0,
+    totalDontRecommend: 0,
     byCategory: {
       simplified_chinese: 0,
       content_farm: 0,
@@ -80,6 +81,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       chrome.storage.local.set({ stats });
       // Broadcast updated stats to all extension pages (popup)
+      chrome.runtime.sendMessage({ type: 'STATS_UPDATED', stats }).catch(() => { });
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
+  if (msg.type === 'DONT_RECOMMEND_RECORDED') {
+    chrome.storage.local.get(['stats']).then((data) => {
+      const stats = data.stats ?? { ...DEFAULT_STATE.stats };
+      if (!stats.byCategory) stats.byCategory = { ...DEFAULT_STATE.stats.byCategory };
+      stats.totalDontRecommend = (stats.totalDontRecommend || 0) + 1;
+      if (msg.categories && Array.isArray(msg.categories)) {
+        for (const cat of msg.categories) {
+          if (cat in stats.byCategory) stats.byCategory[cat]++;
+        }
+      }
+      chrome.storage.local.set({ stats });
       chrome.runtime.sendMessage({ type: 'STATS_UPDATED', stats }).catch(() => { });
       sendResponse({ ok: true });
     });
