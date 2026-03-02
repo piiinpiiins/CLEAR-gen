@@ -39,6 +39,8 @@ CLEAR-gen 使用**多信號加權評分框架**，包含 8 個信號分析器：
 
 ## 安裝
 
+> 📺 [安裝教學影片](https://youtu.be/8CadX1z8cns?si=Tev6d2agzbbxNGp-)
+
 1. Clone 此 repo
 2. 開啟 `chrome://extensions/`
 3. 啟用**開發人員模式**
@@ -49,6 +51,12 @@ CLEAR-gen 使用**多信號加權評分框架**，包含 8 個信號分析器：
 
 - 點擊擴充功能圖示可開關及查看各分類偵測統計
 - 開啟 DevTools 主控台，篩選 `[CLEAR-gen]` 可查看即時 log
+
+## 贊助
+
+如果這個工具對你有幫助，歡迎請我喝杯咖啡：
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-支持開發-orange?style=for-the-badge&logo=buy-me-a-coffee)](https://buymeacoffee.com/apinrece)
 
 ## 授權
 
