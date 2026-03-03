@@ -21,7 +21,7 @@
 | `ai_fake_knowledge` | AI 假知識 | 🔴 紅色 | 冷知識合集、醫生不告訴你、量子養生 |
 | `content_farm` | 內容農場 | 🟡 黃色 | 震惊！、99%的人不知道、真相曝光 |
 | `china_origin` | 中國來源頻道 | 🟡 黃色 | CCTV、央視、bilibili、新華社 |
-| `simplified_chinese` | 簡體字內容 | 🟢 綠色 | 標題含有簡體中文字元 |
+| `simplified_chinese` | 簡體字內容 | 🟡 黃色 | 標題含有簡體中文字元 |
 
 ## 偵測框架
 
