@@ -123,6 +123,8 @@ const CHANNEL_BLACKLIST = [
     /新聞大白話/,
     /寰宇/,
     /大新聞大爆卦/,
+    /范琪斐/,
+    /慧眼看中國/,
 ];
 
 // ============================================================
@@ -575,6 +577,12 @@ function detectAIGenerated(title, channelName, metadata) {
  * Replaces the original analyzeVideo() in content.js.
  */
 function analyzeVideo(title, channelName, card) {
+    // 白名單：可信頻道直接跳過
+    if (channelName && typeof CHANNEL_WHITELIST !== 'undefined' &&
+        CHANNEL_WHITELIST.some(w => channelName.includes(w))) {
+        return { shouldAct: false, detections: {}, overallConfidence: 0, categoriesDetected: [], metadata: {} };
+    }
+
     const metadata = extractMetadataSignals(card);
 
     const simplified = detectSimplifiedChinese(`${title} ${channelName || ''}`);
