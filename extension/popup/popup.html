@@ -16,11 +16,20 @@
     </div>
 
     <div class="toggle-row">
-      <span class="toggle-label">Auto Dislike</span>
+      <span class="toggle-label">Auto Run</span>
       <label class="switch">
         <input type="checkbox" id="toggleSwitch">
         <span class="slider"></span>
       </label>
+    </div>
+
+    <div class="schedule-row">
+      <span class="schedule-label">排程</span>
+      <div class="schedule-inputs">
+        <input type="text" id="scheduleStart" class="time-input" placeholder="HH:MM" maxlength="5" title="開始時間（24 小時制）">
+        <span class="schedule-sep">~</span>
+        <input type="text" id="scheduleEnd" class="time-input" placeholder="HH:MM" maxlength="5" title="結束時間（24 小時制）">
+      </div>
     </div>
 
     <div class="stats">

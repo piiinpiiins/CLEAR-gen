@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "Auto-dislike YouTube videos",
   "permissions": [
-    "storage"
+    "storage",
+    "alarms"
   ],
   "host_permissions": [
     "*://www.youtube.com/*"

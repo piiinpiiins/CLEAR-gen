@@ -94,6 +94,49 @@ body {
   transform: translateX(18px);
 }
 
+/* --- Schedule Row --- */
+.schedule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #333;
+}
+
+.schedule-label {
+  font-size: 13px;
+  color: #aaa;
+}
+
+.schedule-inputs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.time-input {
+  width: 56px;
+  padding: 3px 6px;
+  text-align: center;
+  letter-spacing: 0.5px;
+  background: #222;
+  color: #fff;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.time-input:focus {
+  outline: none;
+  border-color: #cc0000;
+}
+
+.schedule-sep {
+  color: #666;
+  font-size: 13px;
+}
+
 .stats {
   padding: 14px 0 8px;
   text-align: center;

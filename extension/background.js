@@ -1,7 +1,10 @@
 // Dont_Recommend Background Service Worker
 
 const DEFAULT_STATE = {
-  enabled: true,
+  autoRun: false,     // user toggle (Auto Run ON/OFF)
+  enabled: false,     // effective running state for content scripts
+  scheduleStart: '',  // HH:MM or empty
+  scheduleEnd: '',    // HH:MM or empty
   stats: {
     totalDislikes: 0,
     totalDontRecommend: 0,
@@ -23,7 +26,6 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     await chrome.storage.local.set(DEFAULT_STATE);
     console.log('[Dont_Recommend] Extension installed, defaults set');
   }
-  // On update, migrate stats to include byCategory if missing
   if (details.reason === 'update') {
     const data = await chrome.storage.local.get(['stats']);
     if (data.stats && !data.stats.byCategory) {
@@ -34,33 +36,113 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   }
 });
 
+// --- Schedule helpers ---
+
+function parseHHMM(str) {
+  if (!str || !str.includes(':')) return null;
+  const [h, m] = str.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return null;
+  return { h, m };
+}
+
+function isTimeInRange(now, start, end) {
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const startMin = start.h * 60 + start.m;
+  const endMin = end.h * 60 + end.m;
+  if (startMin <= endMin) {
+    return nowMin >= startMin && nowMin < endMin;
+  }
+  // Crosses midnight (e.g. 23:00 ~ 02:00)
+  return nowMin >= startMin || nowMin < endMin;
+}
+
+function broadcastEnabled(effectiveEnabled) {
+  chrome.tabs.query({ url: '*://www.youtube.com/*' }, (tabs) => {
+    for (const tab of tabs) {
+      chrome.tabs.sendMessage(tab.id, {
+        type: 'STATE_CHANGED',
+        enabled: effectiveEnabled,
+      }).catch(() => { });
+    }
+  });
+}
+
+/** Compute effective enabled: autoRun AND (no schedule OR in time window) */
+function computeEffectiveEnabled(autoRun, scheduleStart, scheduleEnd) {
+  if (!autoRun) return false;
+  const start = parseHHMM(scheduleStart);
+  const end = parseHHMM(scheduleEnd);
+  if (!start || !end) return true; // no schedule → run immediately
+  return isTimeInRange(new Date(), start, end);
+}
+
+async function applyEffectiveState() {
+  const data = await chrome.storage.local.get(['autoRun', 'scheduleStart', 'scheduleEnd', 'enabled']);
+  const effective = computeEffectiveEnabled(data.autoRun, data.scheduleStart, data.scheduleEnd);
+  if (effective !== (data.enabled ?? false)) {
+    await chrome.storage.local.set({ enabled: effective });
+    broadcastEnabled(effective);
+  }
+}
+
+async function setupScheduleAlarm() {
+  const data = await chrome.storage.local.get(['autoRun', 'scheduleStart', 'scheduleEnd']);
+  if (data.autoRun && data.scheduleStart && data.scheduleEnd) {
+    await chrome.alarms.create('schedule-check', { periodInMinutes: 1 });
+  } else {
+    await chrome.alarms.clear('schedule-check');
+  }
+}
+
 // Message handler
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'GET_STATE') {
-    chrome.storage.local.get(['enabled', 'stats']).then((data) => {
+    chrome.storage.local.get(['autoRun', 'enabled', 'stats']).then((data) => {
       const stats = data.stats ?? DEFAULT_STATE.stats;
-      // Ensure byCategory exists (migration safety)
       if (!stats.byCategory) stats.byCategory = { ...DEFAULT_STATE.stats.byCategory };
       sendResponse({
-        enabled: data.enabled ?? DEFAULT_STATE.enabled,
+        autoRun: data.autoRun ?? false,
+        enabled: data.enabled ?? false,
         stats,
       });
     });
     return true;
   }
 
-  if (msg.type === 'SET_ENABLED') {
-    chrome.storage.local.set({ enabled: msg.enabled }).then(() => {
-      // Broadcast to all YouTube tabs
-      chrome.tabs.query({ url: '*://www.youtube.com/*' }, (tabs) => {
-        for (const tab of tabs) {
-          chrome.tabs.sendMessage(tab.id, {
-            type: 'STATE_CHANGED',
-            enabled: msg.enabled,
-          }).catch(() => { });
-        }
-      });
+  if (msg.type === 'SET_AUTO_RUN') {
+    const autoRun = msg.autoRun;
+    chrome.storage.local.get(['scheduleStart', 'scheduleEnd']).then(async (data) => {
+      const effective = computeEffectiveEnabled(autoRun, data.scheduleStart, data.scheduleEnd);
+      await chrome.storage.local.set({ autoRun, enabled: effective });
+      broadcastEnabled(effective);
+      if (autoRun) {
+        await setupScheduleAlarm();
+      } else {
+        await chrome.alarms.clear('schedule-check');
+      }
       sendResponse({ ok: true });
+    });
+    return true;
+  }
+
+  if (msg.type === 'SET_SCHEDULE') {
+    chrome.storage.local.set({
+      scheduleStart: msg.scheduleStart || '',
+      scheduleEnd: msg.scheduleEnd || '',
+    }).then(async () => {
+      await applyEffectiveState();
+      await setupScheduleAlarm();
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
+  if (msg.type === 'GET_SCHEDULE') {
+    chrome.storage.local.get(['scheduleStart', 'scheduleEnd']).then((data) => {
+      sendResponse({
+        scheduleStart: data.scheduleStart || '',
+        scheduleEnd: data.scheduleEnd || '',
+      });
     });
     return true;
   }
@@ -71,16 +153,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (!stats.byCategory) stats.byCategory = { ...DEFAULT_STATE.stats.byCategory };
       stats.totalDislikes++;
       stats.lastDislikedAt = Date.now();
-      // Increment per-category counts
       if (msg.categories && Array.isArray(msg.categories)) {
         for (const cat of msg.categories) {
-          if (cat in stats.byCategory) {
-            stats.byCategory[cat]++;
-          }
+          if (cat in stats.byCategory) stats.byCategory[cat]++;
         }
       }
       chrome.storage.local.set({ stats });
-      // Broadcast updated stats to all extension pages (popup)
       chrome.runtime.sendMessage({ type: 'STATS_UPDATED', stats }).catch(() => { });
       sendResponse({ ok: true });
     });
@@ -110,4 +188,34 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true;
   }
+});
+
+// --- Schedule Alarm ---
+
+async function checkSchedule() {
+  const data = await chrome.storage.local.get(['autoRun', 'enabled', 'scheduleStart', 'scheduleEnd']);
+  if (!data.autoRun) return;
+
+  const start = parseHHMM(data.scheduleStart);
+  const end = parseHHMM(data.scheduleEnd);
+  if (!start || !end) return;
+
+  const inRange = isTimeInRange(new Date(), start, end);
+
+  if (inRange && !data.enabled) {
+    // Entered schedule window — activate
+    console.log('[Dont_Recommend] Schedule started, activating');
+    await chrome.storage.local.set({ enabled: true });
+    broadcastEnabled(true);
+  } else if (!inRange && data.enabled) {
+    // Left schedule window — auto turn OFF completely
+    console.log('[Dont_Recommend] Schedule ended, auto turning OFF');
+    await chrome.storage.local.set({ autoRun: false, enabled: false });
+    await chrome.alarms.clear('schedule-check');
+    broadcastEnabled(false);
+  }
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'schedule-check') checkSchedule();
 });

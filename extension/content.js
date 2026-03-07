@@ -492,7 +492,7 @@ async function waitForPlayer(timeout = 10000) {
 
 let enabled = true;
 let isRunning = false;
-const scannedCards = new WeakSet();
+let scannedCards = new WeakSet();
 const processedVideoIds = new Set();
 
 function goHome() {
@@ -1107,12 +1107,24 @@ function setupAdSkipObserver() {
   setInterval(tryClickSkip, 1000);
 }
 
+function removeAllBadges() {
+  document.querySelectorAll(
+    `.${BADGE_CLASS}-overlay, .${BADGE_CLASS}-watch, .${BADGE_CLASS}-player-overlay`
+  ).forEach(el => el.remove());
+}
+
 function setupMessageListener() {
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'STATE_CHANGED') {
       enabled = msg.enabled;
-      console.log(LOG, `State changed: enabled=${enabled}`);
-      if (enabled) handlePageChange();
+      if (enabled) {
+        console.log(LOG, 'start !');
+        scannedCards = new WeakSet(); // reset so cards get re-scanned
+        handlePageChange();
+      } else {
+        console.log(LOG, 'completed !');
+        removeAllBadges();
+      }
     }
   });
 }
@@ -1123,8 +1135,8 @@ async function init() {
 
   try {
     const data = await chrome.storage.local.get(['enabled']);
-    enabled = data.enabled ?? true;
-  } catch (_) { enabled = true; }
+    enabled = data.enabled ?? false;
+  } catch (_) { enabled = false; }
 
   console.log(LOG, `Initialized, enabled=${enabled}`);
   setupAdSkipObserver();
