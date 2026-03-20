@@ -995,10 +995,11 @@ async function scanWatchPageRecommendations() {
         titleEl.parentNode.insertBefore(badge, titleEl);
       }
 
-      // If problematic, try to remove it
-      if (result.shouldAct) {
+      // If RED, YELLOW, or PURPLE, try to remove it
+      // (GREEN is safe, only exclude GREEN from action)
+      if (severity === 'red' || severity === 'yellow' || severity === 'purple') {
         problemCount++;
-        console.log(LOG, `Found problematic video in recommendations: 「${title}」`);
+        console.log(LOG, `Found ${severity} video in recommendations: 「${title}」`);
 
         // Try to click "Don't recommend" on the recommendation card
         const menuButton = card.querySelector('button#button[aria-label*="Action menu"]');
@@ -1010,7 +1011,7 @@ async function scanWatchPageRecommendations() {
           const menuItems = document.querySelectorAll('ytd-menu-service-item-renderer tp-yt-paper-item');
           for (const item of menuItems) {
             if (DONT_RECOMMEND_TEXT.some(text => item.textContent?.includes(text))) {
-              console.log(LOG, `Clicking "Don't recommend" for: 「${title}」`);
+              console.log(LOG, `Clicking "Don't recommend" for ${severity}: 「${title}」`);
               item.click();
               await sleep(500);
               break;
