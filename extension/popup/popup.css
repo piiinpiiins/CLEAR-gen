@@ -137,6 +137,36 @@ body {
   font-size: 13px;
 }
 
+/* --- Interval Row --- */
+.interval-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #333;
+}
+
+.interval-label {
+  font-size: 13px;
+  color: #aaa;
+}
+
+.interval-select {
+  padding: 3px 8px;
+  background: #222;
+  color: #fff;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.interval-select:focus {
+  outline: none;
+  border-color: #cc0000;
+}
+
 .stats {
   padding: 14px 0 8px;
   text-align: center;

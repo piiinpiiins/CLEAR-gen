@@ -5,6 +5,7 @@ const totalDontRecommend = document.getElementById('totalDontRecommend');
 const resetBtn = document.getElementById('resetBtn');
 const scheduleStartInput = document.getElementById('scheduleStart');
 const scheduleEndInput = document.getElementById('scheduleEnd');
+const intervalSelect = document.getElementById('intervalSelect');
 
 const CATEGORY_IDS = [
   'simplified_chinese', 'content_farm', 'ai_fake_knowledge',
@@ -39,29 +40,36 @@ function formatTime(date) {
   return `${hours}:${minutes}`;
 }
 
-// Load schedule on popup open
+// Load schedule and interval on popup open
 chrome.runtime.sendMessage({ type: 'GET_SCHEDULE' }, (response) => {
   if (response) {
-    // If no schedule is set, auto-fill with current time and +5 minutes
-    if (!response.scheduleStart && !response.scheduleEnd) {
-      const now = new Date();
-      const fiveMinutesLater = new Date(now.getTime() + 5 * 60 * 1000);
+    scheduleStartInput.value = response.scheduleStart || '';
+    scheduleEndInput.value = response.scheduleEnd || '';
 
-      scheduleStartInput.value = formatTime(now);
-      scheduleEndInput.value = formatTime(fiveMinutesLater);
-
-      // Auto-save the default schedule
-      saveSchedule();
-    } else {
-      scheduleStartInput.value = response.scheduleStart || '';
-      scheduleEndInput.value = response.scheduleEnd || '';
+    // Load saved interval or default to 5 minutes
+    if (response.interval) {
+      intervalSelect.value = response.interval;
     }
   }
 });
 
-// Toggle handler — controls autoRun
+// Toggle handler — controls autoRun and sets initial schedule
 toggleSwitch.addEventListener('change', () => {
   const autoRun = toggleSwitch.checked;
+
+  // When turning ON, auto-fill schedule with current time + selected interval
+  if (autoRun && !scheduleStartInput.value && !scheduleEndInput.value) {
+    const now = new Date();
+    const intervalMinutes = parseInt(intervalSelect.value);
+    const endTime = new Date(now.getTime() + intervalMinutes * 60 * 1000);
+
+    scheduleStartInput.value = formatTime(now);
+    scheduleEndInput.value = formatTime(endTime);
+
+    // Save the schedule immediately
+    saveSchedule();
+  }
+
   chrome.runtime.sendMessage({ type: 'SET_AUTO_RUN', autoRun });
 });
 
@@ -92,14 +100,35 @@ function setupTimeInput(input) {
 setupTimeInput(scheduleStartInput);
 setupTimeInput(scheduleEndInput);
 
+// Handle interval change - update end time when interval changes
+intervalSelect.addEventListener('change', () => {
+  // Only update if we have a start time
+  if (scheduleStartInput.value && isValidTime(scheduleStartInput.value)) {
+    const [h, m] = scheduleStartInput.value.split(':').map(Number);
+    const startTime = new Date();
+    startTime.setHours(h, m, 0, 0);
+
+    const intervalMinutes = parseInt(intervalSelect.value);
+    const endTime = new Date(startTime.getTime() + intervalMinutes * 60 * 1000);
+
+    scheduleEndInput.value = formatTime(endTime);
+    saveSchedule();
+  } else {
+    // Just save the interval preference
+    saveSchedule();
+  }
+});
+
 function saveSchedule() {
   const start = scheduleStartInput.value;
   const end = scheduleEndInput.value;
+  const interval = intervalSelect.value;
   if ((start && !isValidTime(start)) || (end && !isValidTime(end))) return;
   chrome.runtime.sendMessage({
     type: 'SET_SCHEDULE',
     scheduleStart: start,
     scheduleEnd: end,
+    interval: interval,
   });
 }
 

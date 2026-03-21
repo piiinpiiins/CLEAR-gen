@@ -5,6 +5,7 @@ const DEFAULT_STATE = {
   enabled: false,     // effective running state for content scripts
   scheduleStart: '',  // HH:MM or empty
   scheduleEnd: '',    // HH:MM or empty
+  interval: '5',      // interval in minutes (3 or 5)
   stats: {
     totalDislikes: 0,
     totalDontRecommend: 0,
@@ -129,6 +130,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     chrome.storage.local.set({
       scheduleStart: msg.scheduleStart || '',
       scheduleEnd: msg.scheduleEnd || '',
+      interval: msg.interval || '5',
     }).then(async () => {
       await applyEffectiveState();
       await setupScheduleAlarm();
@@ -138,10 +140,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   if (msg.type === 'GET_SCHEDULE') {
-    chrome.storage.local.get(['scheduleStart', 'scheduleEnd']).then((data) => {
+    chrome.storage.local.get(['scheduleStart', 'scheduleEnd', 'interval']).then((data) => {
       sendResponse({
         scheduleStart: data.scheduleStart || '',
         scheduleEnd: data.scheduleEnd || '',
+        interval: data.interval || '5',
       });
     });
     return true;
